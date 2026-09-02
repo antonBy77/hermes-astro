@@ -388,7 +388,14 @@ async def on_fallback(u: Update, ctx):
 def main():
     if not TELEGRAM_TOKEN:
         print("ASTRO_TG_TOKEN не задан"); sys.exit(1)
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    from telegram.request import HTTPXRequest
+    req = HTTPXRequest(connect_timeout=30, read_timeout=30, write_timeout=30, pool_timeout=30)
+    get_updates_req = HTTPXRequest(connect_timeout=30, read_timeout=60, write_timeout=30, pool_timeout=30)
+    app = (Application.builder()
+           .token(TELEGRAM_TOKEN)
+           .request(req)
+           .get_updates_request(get_updates_req)
+           .build())
 
     lang_conv = ConversationHandler(
         entry_points=[CommandHandler("start", cmd_start), CommandHandler("lang", cmd_lang)],

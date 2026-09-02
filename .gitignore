@@ -1,3 +1,4 @@
+astro.env
 astro_bot.db
 *.log
 __pycache__/

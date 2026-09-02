@@ -5,11 +5,11 @@ import json, sys, os
 
 swe.set_ephe_path(os.path.expanduser("~/.hermes/ephe"))
 
-# Гуково, Ростовская обл.
-LAT, LON = 48.05, 39.87
-# 14:15 московское летнее время 1987 = UTC+4 → 10:15 UT
-Y, M, D = 1987, 8, 20
-UT = 10.25  # 10:15
+# Пример: место рождения (широта/долгота в градусах) — поменяйте на своё
+LAT, LON = 55.75, 37.62  # Москва
+# Дата и время рождения
+Y, M, D = 1990, 1, 1
+UT = 9.0  # часы UTC (внимание: для исторических дат учтите декретное/летнее время!)
 
 FLAGS = swe.FLG_MOSEPH | swe.FLG_SPEED
 
@@ -29,9 +29,9 @@ def fmt(lon):
 jd = swe.julday(Y, M, D, UT)
 cusps, ascmc = swe.houses(jd, LAT, LON, b'P')  # Плацидус
 
-out = {"дата": f"{D}.{M}.{Y}", "время_мск": "14:15 (UTC+4 летнее)", "место": "Гуково 48.05N 39.87E"}
+out = {"дата": f"{D}.{M}.{Y}", "время_мск": "12:00 (UTC+3)", "место": f"{LAT}N {LON}E"}
 
-print(f"=== НАТАЛЬНАЯ КАРТА {D}.{M}.{Y}, 14:15 МСК (лето), Гуково ===\n")
+print(f"=== НАТАЛЬНАЯ КАРТА {D}.{M}.{Y} {UT:05.2f} UT, {LAT}N {LON}E ===\n")
 print(f"АСЦЕНДЕНТ: {fmt(ascmc[0])}")
 print(f"MC:        {fmt(ascmc[1])}\n")
 out["asc"] = fmt(ascmc[0]); out["mc"] = fmt(ascmc[1])

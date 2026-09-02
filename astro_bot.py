@@ -393,7 +393,9 @@ def main():
     lang_conv = ConversationHandler(
         entry_points=[CommandHandler("start", cmd_start), CommandHandler("lang", cmd_lang)],
         states={LANG: [MessageHandler(filters.Regex("Русский|English"), on_lang)]},
-        fallbacks=[MessageHandler(filters.ALL, on_fallback)], allow_reentry=True)
+        # БЕЗ жадного fallback: команды (/natal и др.) должны проходить сквозь выбор языка
+        fallbacks=[],
+        allow_reentry=True, per_message=False)
 
     natal_conv = ConversationHandler(
         entry_points=[CommandHandler("natal", cmd_natal)],
@@ -409,11 +411,12 @@ def main():
                 SYN_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_syn_city)]},
         fallbacks=[CommandHandler("cancel", on_fallback)], allow_reentry=True)
 
-    app.add_handler(lang_conv)
-    app.add_handler(natal_conv)
-    app.add_handler(syn_conv)
-    app.add_handler(CommandHandler(["transits", "tr"], cmd_transits))
-    app.add_handler(CommandHandler("help", cmd_help))
+    # приоритет команд над сообщениями диалогов: /natal всегда начинает заново
+    app.add_handler(CommandHandler(["transits", "tr"], cmd_transits), group=0)
+    app.add_handler(CommandHandler("help", cmd_help), group=0)
+    app.add_handler(natal_conv, group=1)
+    app.add_handler(syn_conv, group=1)
+    app.add_handler(lang_conv, group=2)
 
     print("QS_astro_bot v2 запущен")
     while True:

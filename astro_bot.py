@@ -6,7 +6,7 @@ QS_astro_bot v2 — Telegram-бот натальной астрологии.
 Спонсор: фонд quantumstocks (бета-версия).
 Репозиторий: https://github.com/antonBy77/hermes-astro
 
-Лимиты: 1 бесплатный прогноз/день + 3 общих на Telegram ID.
+Лимиты: 5 прогнозов/день на Telegram ID.
 """
 import asyncio, json, os, re, sqlite3, sys, time
 from datetime import datetime, timezone
@@ -27,7 +27,7 @@ MAX_TOKENS = 2000  # reasoning-модели: часть бюджета съед�
 
 EPHE_PATH = os.path.expanduser("~/.hermes/ephe")
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "astro_bot.db")
-MAX_TOTAL, MAX_DAILY = 3, 1
+MAX_TOTAL, MAX_DAILY = 3, 5  # 3 общих на аккаунт; 5 прогнозов в день
 MAX_MSG = 4000
 
 BETA_FOOTER_RU = "\n\n🎁 Бета-версия при поддержке фонда quantumstocks ★ github.com/antonBy77/hermes-astro"
@@ -60,13 +60,13 @@ T = {
          "/transits — транзиты к вашей карте\n"
          "/synastry — совместимость с партнёром\n"
          "/lang — сменить язык\n\n"
-         f"Лимиты: 1 бесплатный прогноз в день + {MAX_TOTAL} на аккаунт.\n"
+         f"Лимиты: {MAX_DAILY} прогнозов в день.\n"
          "⚠ Интерпретации — традиция астрологии, не научный прогноз."),
 "help_en": ("<b>QS_astro</b> — Swiss Ephemeris astrology (accuracy ~0.1\")\n"
          "🎁 Beta sponsored by quantumstocks fund\n\n"
          "<b>Commands:</b>\n/natal — build chart (step by step)\n/transits — current transits\n"
          "/synastry — partner compatibility\n/lang — change language\n\n"
-         f"Limits: 1 free forecast/day + {MAX_TOTAL} total per account.\n"
+         f"Limits: {MAX_DAILY} forecasts/day.\n"
          "⚠ Interpretations are astrological tradition, not scientific prediction."),
 "enter_date": "📅 Введите дату рождения: ДД.ММ.ГГГГ (напр. 20.08.1987)",
 "enter_time": "⏰ Введите местное время рождения: ЧЧ:ММ (напр. 14:15).\nЕсли время неизвестно — отправьте 12:00",
@@ -83,10 +83,10 @@ T = {
 "need_chart": "Сначала постройте карту: /natal", "need_chart_en": "Build a chart first: /natal",
 "quota_day": "Использован дневной бесплатный прогноз (обновится завтра)",
 "quota_day_en": "Daily free forecast used (resets tomorrow)",
-"quota_total": "Использован общий прогноз (осталось {n} из {m})",
-"quota_total_en": "Total forecast used ({n} of {m} left)",
-"quota_done": "⛔ Лимиты исчерпаны на сегодня: дневной бесплатный уже получен, общий лимит 3 исчерпан. Возвращайтесь завтра ★",
-"quota_done_en": "⛔ Limits reached: daily free used, total limit of 3 exhausted. Come back tomorrow ★",
+"quota_total": "Прогноз использован. Осталось сегодня: {n} из {m}",
+"quota_total_en": "Forecast used. Left today: {n} of {m}",
+"quota_done": "⛔ Дневной лимит {n} прогнозов исчерпан. Возвращайтесь завтра ★",
+"quota_done_en": "⛔ Daily limit of {n} forecasts exhausted. Come back tomorrow ★",
 "transit_header": "🌌 Транзиты на {now}:", "transit_header_en": "🌌 Transits as of {now}:",
 },
 "en": {}
@@ -102,7 +102,15 @@ def db():
     con = sqlite3.connect(DB_PATH)
     con.execute("""CREATE TABLE IF NOT EXISTS users(
         tg_id INTEGER PRIMARY KEY, lang TEXT DEFAULT 'ru', birth TEXT, lat REAL, lon REAL,
-        total_used INTEGER DEFAULT 0, last_free_date TEXT)""")
+        total_used INTEGER DEFAULT 0, last_free_date TEXT,
+        daily_used INTEGER DEFAULT 0, daily_date TEXT)""")
+    # миграция старых таблиц
+    cols = [r[1] for r in con.execute("PRAGMA table_info(users)")]
+    if "daily_used" not in cols:
+        con.execute("ALTER TABLE users ADD COLUMN daily_used INTEGER DEFAULT 0")
+    if "daily_date" not in cols:
+        con.execute("ALTER TABLE users ADD COLUMN daily_date TEXT")
+    con.commit()
     return con
 
 def get_user(tg_id):
@@ -124,22 +132,26 @@ def save_chart(tg_id, birth, lat, lon):
     con.commit(); con.close()
 
 def consume_quota(tg_id, lang):
+    """Дневной лимит MAX_DAILY прогнозов; общий запас MAX_TOTAL на аккаунт."""
     con = db()
-    row = con.execute("SELECT total_used,last_free_date FROM users WHERE tg_id=?", (tg_id,)).fetchone()
+    row = con.execute("SELECT total_used,daily_used,daily_date FROM users WHERE tg_id=?", (tg_id,)).fetchone()
     if not row:
         con.close(); return False, tr(lang,"need_chart")
-    total_used, last_free = row
+    total_used, daily_used, daily_date = row
     today = time.strftime("%Y-%m-%d")
-    if last_free != today:
-        con.execute("UPDATE users SET last_free_date=? WHERE tg_id=?", (today, tg_id))
-        con.commit(); con.close()
-        return True, tr(lang, "quota_day")
-    if total_used < MAX_TOTAL:
-        con.execute("UPDATE users SET total_used=total_used+1 WHERE tg_id=?", (tg_id,))
-        con.commit(); con.close()
-        return True, tr(lang, "quota_total", n=MAX_TOTAL-total_used-1, m=MAX_TOTAL)
-    con.close()
-    return False, tr(lang, "quota_done")
+    if daily_date != today:  # новый день — дневной счётчик обнуляется
+        daily_used, daily_date = 0, today
+        con.execute("UPDATE users SET daily_used=0, daily_date=? WHERE tg_id=?", (today, tg_id))
+        con.commit()
+    if daily_used >= MAX_DAILY:
+        con.close()
+        return False, tr(lang, "quota_done", n=MAX_DAILY)
+    # списываем дневный счётчик
+    con.execute("UPDATE users SET daily_used=daily_used+1 WHERE tg_id=?", (tg_id,))
+    con.execute("UPDATE users SET total_used=total_used+1 WHERE tg_id=?", (tg_id,))
+    con.commit(); con.close()
+    left_today = MAX_DAILY - (daily_used + 1)
+    return True, tr(lang, "quota_total", n=left_today, m=MAX_DAILY)
 
 # ---------- Астрономия ----------
 def fmt(lon, lang="ru"):

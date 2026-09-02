@@ -30,6 +30,12 @@ python3 transits_now.py   # транзиты на текущий момент
 - `natal_chart.py`: `Y, M, D`, `UT` (часы UTC), `LAT`, `LON`, систему домов (`b'P'` = Плацидус, `b'W'` = целые знаки, `b'K'` = Кох…)
 - `transits_now.py`: словарь `NATAL_LON` (свои натальные долготы в формате `"10°00' Козерог"`)
 
+## Спонсор
+
+🎁 Проект спонсируется фондом **quantumstocks**. Это **бета-версия**.
+
+Репозиторий: https://github.com/antonBy77/hermes-astro
+
 ## Важно (дисклеймер)
 
 Астрономические расчёты точны (Swiss Ephemeris). Интерпретации аспектов — традиция астрологии, научной доказательной базы не имеет. Инструмент для рефлексии и развлечения, не для принятия решений.
@@ -37,3 +43,16 @@ python3 transits_now.py   # транзиты на текущий момент
 ## Лицензия
 
 MIT. Swiss Ephemeris — AGPL (для личного/open-source использования свободно; при встраивании в закрытый коммерческий продукт нужна лицензия AGS).
+
+## Telegram-бот @QS_astro_bot (бета)
+
+```bash
+export ASTRO_TG_TOKEN="ваш_токен"
+export ASTRO_LLM_URL="https://ваш-llm-endpoint/v1/chat/completions"
+export ASTRO_LLM_KEY="ваш_ключ"
+export ASTRO_LLM_MODEL="QSmodels"
+python3 astro_bot.py
+```
+
+Команды: /natal (пошаговый ввод даты/времени/города), /transits, /synastry, /lang (RU/EN).
+Лимиты: 1 бесплатный прогноз/день + 3 на аккаунт (SQLite).
